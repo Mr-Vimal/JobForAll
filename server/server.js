@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -17,10 +18,62 @@ import { clerkWebhooks } from "./controllers/webhooks.js";
 
 const app = express();
 
-connectDB();
-await connectCloudinary();
+// 1. CORS FIRST
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5000",
+  "https://jobforall-lk.vercel.app",
+  "https://client-three-ashen-56.vercel.app"
+];
 
-// Clerk middleware FIRST
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error("Blocked CORS origin:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+// 2. WEBHOOK RAW BODY
+app.post(
+  "/webhooks",
+  express.raw({ type: "application/json" }),
+  clerkWebhooks
+);
+
+// 3. JSON BODY
+app.use(express.json());
+
+// 4. INITIALIZE DATABASE AND CLOUDINARY
+let initializationPromise;
+
+app.use(async (req, res, next) => {
+  try {
+    if (!initializationPromise) {
+      initializationPromise = Promise.all([
+        connectDB(),
+        connectCloudinary()
+      ]);
+    }
+
+    await initializationPromise;
+    next();
+  } catch (error) {
+    console.error("Initialization Error:", error);
+    next(error);
+  }
+});
+
+// 5. CLERK MIDDLEWARE
 app.use(
   clerkMiddleware({
     secretKey: process.env.CLERK_SECRET_KEY,
@@ -28,42 +81,17 @@ app.use(
   })
 );
 
-// CORS
-import cors from 'cors';
+// 6. TEST ROUTE
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "JobForAll API Working"
+  });
+});
 
-const allowedOrigins = [
-  'http://localhost:5000',
-  'https://jobforall-lk.vercel.app'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-app.use(express.json());
-// Webhook must receive raw body
-app.post(
-  "/webhooks",
-  express.raw({ type: "application/json" }),
-  clerkWebhooks
-);
-
-app.use(express.json());
-
-// Test authentication
+// 7. AUTH CHECK
 app.get("/api/auth-check", (req, res) => {
   const auth = getAuth(req);
-
-  console.log("AUTH:", auth);
 
   res.json({
     success: true,
@@ -72,16 +100,11 @@ app.get("/api/auth-check", (req, res) => {
   });
 });
 
-// Public routes
-app.get("/", (req, res) => {
-  res.send("API Working");
-});
-
-// Other routes
+// 8. PUBLIC ROUTES
 app.use("/api/jobs", jobRoutes);
 app.use("/api/company", companyRoutes);
 
-// Protected user routes
+// 9. PROTECTED USER ROUTES
 app.use("/api/users", (req, res, next) => {
   const auth = getAuth(req);
 
@@ -95,10 +118,19 @@ app.use("/api/users", (req, res, next) => {
   next();
 }, userRoutes);
 
+// 10. ERROR HANDLER
+app.use((err, req, res, next) => {
+  console.error("Backend Error:", err);
 
+  if (res.headersSent) {
+    return next(err);
+  }
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  res.status(500).json({
+    success: false,
+    message: "Internal Server Error"
+  });
 });
+
+// IMPORTANT: Export app for Vercel
+export default app;
