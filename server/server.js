@@ -29,13 +29,27 @@ app.use(
 );
 
 // CORS
+import cors from 'cors';
+
+const allowedOrigins = [
+  'http://localhost:5000',
+  'https://jobforall-lk.vercel.app'
+];
+
 app.use(cors({
-  origin: 'https://jobforall-lk.vercel.app',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+app.use(express.json());
 // Webhook must receive raw body
 app.post(
   "/webhooks",
