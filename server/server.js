@@ -95,6 +95,8 @@ app.use("/api/users", (req, res, next) => {
   next();
 }, userRoutes);
 
+
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
