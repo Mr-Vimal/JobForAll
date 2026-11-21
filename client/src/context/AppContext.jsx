@@ -6,7 +6,7 @@ import { useAuth, useUser } from "@clerk/clerk-react";
 export const AppContext = createContext();
 
 export const AppContextProvider = ({ children }) => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    const backendUrl = import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
 
     const { user, isLoaded } = useUser();
     const { getToken } = useAuth();
